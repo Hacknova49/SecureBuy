@@ -1,5 +1,5 @@
 import React from 'react';
-import { ViewMode, UserRole } from '../types';
+import { ViewMode, UserRole } from '../../../types';
 import { Ticket, ScanLine, ShieldAlert, ShoppingBag, PlusCircle } from 'lucide-react';
 
 interface NavigationProps {

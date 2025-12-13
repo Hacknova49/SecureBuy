@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Navigation } from '../../components/Navigation';
-import { ViewMode, Ticket, ScanResult, User, UserRole, Event } from '../../types';
+import { Navigation } from './components/Navigation';
+import { ViewMode, Ticket, ScanResult, User, UserRole, Event } from './types';
 // Updated Imports from api.ts
 import { getTicketsForUser, getMyDeviceId, getCurrentUser, registerOrLogin, logout, getEvents, purchaseTicket, createEvent, recoverAccount, generateHype, chatConcierge } from './services/api';
-import { SecureQR } from '../../components/SecureQR';
-import { Scanner, ScanResultDisplay } from '../../components/Scanner';
+import { SecureQR } from './components/SecureQR';
+import { Scanner, ScanResultDisplay } from './components/Scanner';
 import { Ticket as TicketIcon, Calendar, MapPin, ShieldCheck, LogOut, Lock, Fingerprint, ShoppingBag, AlertCircle, UserCircle, Briefcase, Plus, Users, ArrowRight, DollarSign, Key, Check, Sparkles, Bot, Tag, ShoppingCart, Trash2, X, Map, Send } from 'lucide-react';
 
 // Chat Message Interface
@@ -25,6 +25,8 @@ export default function App() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [allEvents, setAllEvents] = useState<Event[]>([]);
   const [recommendedEventId, setRecommendedEventId] = useState<string | null>(null);
+  const [isAppLoading, setIsAppLoading] = useState(true);
+  const [appError, setAppError] = useState<string | null>(null);
 
   // Auth Form State
   const [email, setEmail] = useState('');
@@ -61,31 +63,33 @@ export default function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setDeviceId(getMyDeviceId());
-    const currentUser = getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-      initUserData(currentUser);
-    }
+    const initApp = async () => {
+      setDeviceId(getMyDeviceId());
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        setUser(currentUser);
+        await initUserData(currentUser);
+      }
+      setIsAppLoading(false);
+    };
+    initApp();
   }, []);
 
   useEffect(() => {
-      if (showConcierge && chatEndRef.current) {
-          chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
+    if (showConcierge && chatEndRef.current) {
+      (chatEndRef.current as HTMLElement).scrollIntoView({ behavior: 'smooth' });
+    }
   }, [chatMessages, showConcierge]);
 
   const initUserData = async (u: User) => {
-      // Async Data Fetching
-      const evts = await getEvents();
+    try {
+      const [evts, tix] = await Promise.all([getEvents(), u.role === 'USER' ? getTicketsForUser(u.id) : Promise.resolve([])]);
       setAllEvents(evts);
-      if (u.role === 'USER') {
-          const tix = await getTicketsForUser(u.id);
-          setTickets(tix);
-          setMode('MARKET');
-      } else {
-          setMode('ADMIN');
-      }
+      setTickets(tix);
+      setMode(u.role === 'USER' ? 'MARKET' : 'ADMIN');
+    } catch (err) {
+      setAppError(err instanceof Error ? err.message : "Failed to load app data.");
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -102,13 +106,12 @@ export default function App() {
           const { user: u, isNew } = await registerOrLogin(email, name, role);
           setUser(u);
           await initUserData(u);
-          
           if (isNew && u.role === 'USER' && u.recoveryCode) {
               setNewRegistrationCode(u.recoveryCode);
           }
       }
-    } catch (err: any) {
-      setAuthError(err.message || "Login failed");
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setIsAuthLoading(false);
     }
@@ -229,7 +232,7 @@ export default function App() {
       if (!newEvent.name || !newEvent.venue) return;
       setIsGeneratingHype(true);
       try {
-          const text = await generateHype(newEvent.name, newEvent.venue, newEvent.price);
+          const text = await generateHype(newEvent.name, newEvent.venue, Number(newEvent.price));
           setNewEvent(prev => ({ ...prev, description: text }));
       } catch (error) {
           console.error("AI Gen failed", error);
@@ -256,7 +259,7 @@ export default function App() {
 
       try {
           const result = await chatConcierge(userMsg.text, eventsContext);
-          const text = result.text || "Connection error.";
+          const text = result.reply || "Connection error.";
           
           // Parse for Event ID
           const match = text.match(/\[ID:(.*?)\]/);
@@ -1011,6 +1014,24 @@ export default function App() {
         {renderNewUserRecoveryModal()}
       </>
   );
+
+  if (isAppLoading) {
+    return (
+      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-neon-green border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (appError) {
+    return (
+      <div className="min-h-screen bg-dark-950 flex flex-col items-center justify-center text-center p-4">
+        <AlertCircle size={48} className="text-red-500 mb-4" />
+        <h2 className="text-xl font-bold text-red-400 mb-2">Application Error</h2>
+        <p className="text-gray-400 max-w-md">{appError}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-dark-950 text-white font-sans selection:bg-neon-green selection:text-black relative">

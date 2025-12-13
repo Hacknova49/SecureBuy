@@ -1,6 +1,7 @@
+/// <reference lib="dom" />
 import React, { useEffect, useState } from 'react';
-import { Ticket } from '../types';
-import { OTPService } from '../services/otpService';
+import { Ticket } from '../../../types';
+import { OTPService } from '../../../services/otpService';
 import { Smartphone, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
 
 interface SecureQRProps {
