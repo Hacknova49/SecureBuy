@@ -1,11 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigation } from './components/Navigation';
 import { ViewMode, Ticket, ScanResult, User, UserRole, Event } from './types';
 import { getTicketsForUser, getMyDeviceId, getCurrentUser, registerOrLogin, logout, getEvents, purchaseTicket, createEvent, recoverAccount } from './services/dataService';
 import { SecureQR } from './components/SecureQR';
 import { Scanner, ScanResultDisplay } from './components/Scanner';
-import { Ticket as TicketIcon, Calendar, MapPin, ShieldCheck, LogOut, Lock, Fingerprint, ShoppingBag, AlertCircle, UserCircle, Briefcase, Plus, Users, ArrowRight, DollarSign, Key, Check, Sparkles, Bot, Tag, ShoppingCart, Trash2, X } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { Ticket as TicketIcon, Calendar, MapPin, ShieldCheck, LogOut, Lock, Fingerprint, ShoppingBag, AlertCircle, UserCircle, Briefcase, Plus, Users, ArrowRight, DollarSign, Key, Check, Sparkles, Bot, Tag, ShoppingCart, Trash2, X, Map, Send } from 'lucide-react';
+import { GoogleGenAI, Chat } from "@google/genai";
+
+// Chat Message Interface
+interface ChatMessage {
+    role: 'user' | 'model';
+    text: string;
+    eventId?: string; // If the AI recommends a specific event
+    grounding?: any[]; // Google Maps grounding data
+    timestamp: number;
+}
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -15,6 +24,9 @@ export default function App() {
   const [deviceId, setDeviceId] = useState<string>('');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [allEvents, setAllEvents] = useState<Event[]>([]);
+
+  // State to highlight AI-recommended events
+  const [recommendedEventId, setRecommendedEventId] = useState<string | null>(null);
 
   // Auth Form State
   const [email, setEmail] = useState('');
@@ -38,13 +50,18 @@ export default function App() {
   const [newEvent, setNewEvent] = useState({ name: '', venue: '', price: '', total: '', description: '', tags: '' });
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [isGeneratingHype, setIsGeneratingHype] = useState(false);
+  const [verifyingLocation, setVerifyingLocation] = useState(false);
+
+  // UI State
+  const [visibleMapId, setVisibleMapId] = useState<string | null>(null);
 
   // AI Concierge State
   const [showConcierge, setShowConcierge] = useState(false);
-  const [conciergeInput, setConciergeInput] = useState('');
-  const [conciergeResponse, setConciergeResponse] = useState<string | null>(null);
-  const [conciergeLoading, setConciergeLoading] = useState(false);
-  const [recommendedEventId, setRecommendedEventId] = useState<string | null>(null);
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatSessionRef = useRef<Chat | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setDeviceId(getMyDeviceId());
@@ -54,6 +71,12 @@ export default function App() {
       initUserData(currentUser);
     }
   }, []);
+
+  useEffect(() => {
+      if (showConcierge && chatEndRef.current) {
+          chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+  }, [chatMessages, showConcierge]);
 
   const initUserData = (u: User) => {
       setAllEvents(getEvents());
@@ -70,7 +93,6 @@ export default function App() {
     setAuthError('');
     setIsAuthLoading(true);
     try {
-      // Logic split for Recovery vs Normal Login
       if (isRecoveryMode) {
           const recoveredUser = await recoverAccount(email, recoveryCode);
           setUser(recoveredUser);
@@ -150,18 +172,15 @@ export default function App() {
       setCartError(null);
 
       try {
-          // Process sequentially to keep it simple and safe
           for (const [eventId, qty] of Object.entries(cart)) {
               for (let i = 0; i < qty; i++) {
                   await purchaseTicket(user, eventId);
               }
           }
-          
           setTickets(getTicketsForUser(user.id));
           setCart({});
           setShowCart(false);
           setMode('USER');
-          
       } catch (e: any) {
           setCartError(e.message || "Checkout failed partway through.");
       } finally {
@@ -170,7 +189,28 @@ export default function App() {
       }
   };
 
-  // --- Create Event ---
+  // --- Create Event & AI ---
+
+  const handleVerifyLocation = async () => {
+      if (!newEvent.venue || !process.env.API_KEY) return;
+      setVerifyingLocation(true);
+
+      try {
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: `Locate this place: "${newEvent.venue}". Return the full address.`,
+              config: { tools: [{ googleMaps: {} }] }
+          });
+          if (response.text) {
+              setNewEvent(prev => ({ ...prev, venue: response.text.trim() }));
+          }
+      } catch (e) {
+          console.error("Loc Verify Failed", e);
+      } finally {
+          setVerifyingLocation(false);
+      }
+  };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -186,11 +226,11 @@ export default function App() {
             price: Number(newEvent.price),
             totalTickets: Number(newEvent.total),
             tags: tagArray,
-            date: new Date().toISOString() // Simply now for demo
+            date: new Date().toISOString()
         });
         setAllEvents(getEvents());
         setNewEvent({ name: '', venue: '', price: '', total: '', description: '', tags: '' });
-        setMode('ADMIN'); // Go back to dashboard
+        setMode('ADMIN');
       } catch (err) {
           console.error(err);
       } finally {
@@ -198,73 +238,115 @@ export default function App() {
       }
   }
 
-  // --- AI FEATURES ---
-
-  const handleAiConcierge = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!conciergeInput.trim() || !process.env.API_KEY) return;
-      
-      setConciergeLoading(true);
-      setConciergeResponse(null);
-      setRecommendedEventId(null);
-
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const eventsContext = allEvents.map(e => `ID: ${e.id}, Name: ${e.name}, Tags: ${e.tags.join(',')}, Desc: ${e.description}, Price: ${e.price}`).join('\n');
-        
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `
-                You are a helpful event concierge for a Cyberpunk city.
-                Here are the available events:
-                ${eventsContext}
-
-                The user says: "${conciergeInput}"
-
-                Task:
-                1. Identify the single best matching event ID based on tags and description.
-                2. Write a short, in-character explanation (max 20 words) why this fits.
-
-                Return strictly in this JSON format:
-                { "id": "event_id_here", "reason": "your explanation here" }
-            `
-        });
-
-        const text = response.text.replace(/```json|```/g, '').trim();
-        const data = JSON.parse(text);
-        setConciergeResponse(data.reason);
-        setRecommendedEventId(data.id);
-      } catch (error) {
-          console.error(error);
-          setConciergeResponse("My neural link is fuzzy. I couldn't find a match right now.");
-      } finally {
-          setConciergeLoading(false);
-      }
-  };
-
   const handleGenerateHype = async () => {
       if (!newEvent.name || !newEvent.venue || !process.env.API_KEY) return;
-      
       setIsGeneratingHype(true);
       try {
           const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
           const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash',
-              contents: `
-                  Write a high-energy, cyberpunk-themed 2-sentence marketing description for an event.
-                  Event Name: ${newEvent.name}
-                  Venue: ${newEvent.venue}
-                  Tags: ${newEvent.tags}
-                  Price: $${newEvent.price}
-                  
-                  Tone: Exciting, futuristic, exclusive.
-              `
+              contents: `Write a high-energy, cyberpunk-themed 2-sentence marketing description for: ${newEvent.name} at ${newEvent.venue}. Price: $${newEvent.price}. Tone: Exciting, futuristic.`
           });
           setNewEvent(prev => ({ ...prev, description: response.text }));
       } catch (error) {
           console.error("AI Gen failed", error);
       } finally {
           setIsGeneratingHype(false);
+      }
+  };
+
+  // --- AI Concierge Logic ---
+
+  const startConciergeSession = async () => {
+      if (!process.env.API_KEY) return;
+      
+      const eventsContext = allEvents.map(e => {
+        const soldOut = e.soldTickets >= e.totalTickets;
+        return `ID: ${e.id} | Name: ${e.name} | Venue: ${e.venue} | Tags: ${e.tags.join(', ')} | Price: $${e.price} | Status: ${soldOut ? 'SOLD OUT' : 'Available'}`;
+      }).join('\n');
+
+      let location = undefined;
+        try {
+             const pos: any = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+             });
+             location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        } catch (e) { /* ignore location error */ }
+
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const chat = ai.chats.create({
+          model: 'gemini-2.5-flash',
+          config: {
+              systemInstruction: `
+                You are "Nexus", a cyberpunk event concierge.
+                Available Events Data:
+                ${eventsContext}
+
+                Your Goal: Help users find events, check availability, or locate venues.
+                
+                Rules:
+                1. If asked about location/distance, use the googleMaps tool.
+                2. Be concise, friendly, and futuristic.
+                3. If you recommend a specific event, include its ID at the end of your response in this format: [ID:evt_xxxx].
+                4. If an event is SOLD OUT, warn the user.
+              `,
+              tools: [{ googleMaps: {} }],
+              toolConfig: location ? { retrievalConfig: { latLng: location } } : undefined
+          }
+      });
+      chatSessionRef.current = chat;
+      setChatMessages([{
+          role: 'model',
+          text: "Systems online. I am Nexus. Looking for a specific vibe or location tonight?",
+          timestamp: Date.now()
+      }]);
+  };
+
+  const handleConciergeSend = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!chatInput.trim() || !chatSessionRef.current) return;
+      
+      const userMsg: ChatMessage = { role: 'user', text: chatInput, timestamp: Date.now() };
+      setChatMessages(prev => [...prev, userMsg]);
+      setChatInput('');
+      setIsChatLoading(true);
+
+      try {
+          const result = await chatSessionRef.current.sendMessage({ message: userMsg.text });
+          const text = result.text;
+          
+          // Parse for Event ID
+          const match = text.match(/\[ID:(.*?)\]/);
+          const cleanText = text.replace(/\[ID:.*?\]/, '').trim();
+          const recommendedId = match ? match[1] : undefined;
+          
+          if (recommendedId) {
+            setRecommendedEventId(recommendedId);
+          }
+
+          // Get Grounding
+          const grounding = result.candidates?.[0]?.groundingMetadata?.groundingChunks;
+
+          const aiMsg: ChatMessage = {
+              role: 'model',
+              text: cleanText,
+              eventId: recommendedId,
+              grounding: grounding,
+              timestamp: Date.now()
+          };
+          setChatMessages(prev => [...prev, aiMsg]);
+      } catch (err) {
+          console.error(err);
+          setChatMessages(prev => [...prev, { role: 'model', text: "Connection interrupted. Retrying neural handshake...", timestamp: Date.now() }]);
+      } finally {
+          setIsChatLoading(false);
+      }
+  };
+
+  const openConciergeModal = () => {
+      setShowConcierge(true);
+      if (chatMessages.length === 0) {
+          startConciergeSession();
       }
   };
 
@@ -305,12 +387,10 @@ export default function App() {
 
   const renderLogin = () => (
       <div className="fixed inset-0 bg-dark-950 overflow-hidden">
-        {/* Abstract Background - Fixed */}
         <div className="absolute inset-0 bg-grid-pattern opacity-30 pointer-events-none"></div>
         <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-neon-purple/20 rounded-full blur-[100px]"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-neon-green/20 rounded-full blur-[100px]"></div>
 
-        {/* Scrollable Content Container */}
         <div className="absolute inset-0 overflow-y-auto">
             <div className="min-h-full flex flex-col items-center justify-center p-6 relative z-10">
                 <div className="w-full max-w-md">
@@ -323,8 +403,6 @@ export default function App() {
                     </div>
 
                     <div className="bg-dark-800/60 backdrop-blur-xl p-8 rounded-3xl border border-white/10 shadow-2xl mb-10">
-                        
-                        {/* Role Switcher or Recovery Header */}
                         {!isRecoveryMode ? (
                             <div className="flex bg-black/40 rounded-xl p-1 mb-8 border border-white/5 relative">
                                 <div className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-dark-700 rounded-lg transition-all duration-300 ${role === 'USER' ? 'left-1' : 'left-[calc(50%+4px)]'}`}></div>
@@ -499,52 +577,102 @@ export default function App() {
 
   const renderConciergeModal = () => {
       if (!showConcierge) return null;
+      
       return (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-6 animate-in fade-in">
-              <div className="bg-dark-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border-t sm:border border-neon-blue/50 p-6 shadow-[0_0_50px_rgba(0,243,255,0.2)] animate-in slide-in-from-bottom">
-                  <div className="flex items-center gap-3 mb-4">
-                      <div className="bg-neon-blue/20 p-2 rounded-full">
-                        <Bot className="text-neon-blue" size={24} />
-                      </div>
-                      <div>
-                          <h3 className="text-lg font-bold text-white">Event Concierge</h3>
-                          <p className="text-xs text-neon-blue font-mono">POWERED BY GEMINI</p>
-                      </div>
-                      <button onClick={() => setShowConcierge(false)} className="ml-auto text-gray-500 hover:text-white">✕</button>
-                  </div>
+              <div className="bg-dark-900 w-full sm:max-w-md h-[85vh] sm:h-[600px] rounded-t-3xl sm:rounded-2xl border border-neon-blue/30 flex flex-col shadow-[0_0_50px_rgba(0,243,255,0.15)] overflow-hidden">
                   
-                  <form onSubmit={handleAiConcierge} className="relative">
+                  {/* Chat Header */}
+                  <div className="p-4 bg-dark-800/80 backdrop-blur border-b border-white/10 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-neon-blue/10 flex items-center justify-center border border-neon-blue/30 shadow-[0_0_15px_rgba(0,243,255,0.2)]">
+                        <Bot className="text-neon-blue" size={20} />
+                      </div>
+                      <div className="flex-1">
+                          <h3 className="font-bold text-white text-sm">Nexus AI</h3>
+                          <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse"></span>
+                              <p className="text-[10px] text-neon-blue font-mono tracking-wider">ONLINE</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowConcierge(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                          <X size={18} className="text-gray-400" />
+                      </button>
+                  </div>
+
+                  {/* Chat Messages */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-grid-pattern bg-[length:20px_20px] bg-opacity-5">
+                      {chatMessages.map((msg, idx) => {
+                          const isUser = msg.role === 'user';
+                          const evt = msg.eventId ? allEvents.find(e => e.id === msg.eventId) : null;
+
+                          return (
+                              <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                  <div className={`max-w-[85%] space-y-2`}>
+                                      <div className={`p-3.5 rounded-2xl text-sm leading-relaxed ${isUser ? 'bg-white text-black rounded-tr-none' : 'bg-dark-800 border border-white/10 text-gray-200 rounded-tl-none'}`}>
+                                          {msg.text}
+                                      </div>
+                                      
+                                      {/* Maps Grounding Chips */}
+                                      {msg.grounding && msg.grounding.length > 0 && (
+                                          <div className="flex flex-wrap gap-2">
+                                              {msg.grounding.map((chunk, i) => chunk.maps?.uri && (
+                                                  <a key={i} href={chunk.maps.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] bg-neon-blue/10 text-neon-blue border border-neon-blue/30 px-2 py-1 rounded hover:bg-neon-blue hover:text-black transition-colors">
+                                                      <MapPin size={10} /> {chunk.maps.title || 'Location Map'}
+                                                  </a>
+                                              ))}
+                                          </div>
+                                      )}
+
+                                      {/* Recommended Event Card */}
+                                      {evt && (
+                                          <div className="bg-dark-900 border border-neon-blue/50 rounded-xl overflow-hidden mt-2 max-w-[240px] shadow-lg animate-in zoom-in-95 duration-300">
+                                              <div className="h-24 relative">
+                                                  <img src={evt.image} className="w-full h-full object-cover" alt={evt.name} />
+                                                  <div className="absolute top-2 right-2 bg-black/70 backdrop-blur px-2 py-0.5 rounded text-[10px] font-bold text-neon-green border border-white/10">
+                                                      ${evt.price}
+                                                  </div>
+                                              </div>
+                                              <div className="p-3">
+                                                  <h4 className="font-bold text-white text-xs mb-1 truncate">{evt.name}</h4>
+                                                  <div className="flex items-center gap-1 text-[10px] text-gray-400 mb-3">
+                                                      <Calendar size={10} /> {new Date(evt.date).toLocaleDateString()}
+                                                  </div>
+                                                  <button 
+                                                    onClick={() => { addToCart(evt.id); setShowCart(true); }}
+                                                    className="w-full bg-neon-blue text-black text-xs font-bold py-2 rounded flex items-center justify-center gap-1 hover:bg-white transition-colors"
+                                                  >
+                                                      <Plus size={12} /> Add to Cart
+                                                  </button>
+                                              </div>
+                                          </div>
+                                      )}
+                                      
+                                      <div className={`text-[10px] text-gray-600 ${isUser ? 'text-right' : 'text-left'}`}>
+                                          {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                      </div>
+                                  </div>
+                              </div>
+                          );
+                      })}
+                      <div ref={chatEndRef} />
+                  </div>
+
+                  {/* Input Area */}
+                  <form onSubmit={handleConciergeSend} className="p-3 bg-dark-800 border-t border-white/10 flex gap-2">
                       <input 
-                        className="w-full bg-black border border-white/20 rounded-xl p-4 pr-12 text-white placeholder:text-gray-600 focus:border-neon-blue outline-none"
-                        placeholder="What's your vibe tonight?"
-                        value={conciergeInput}
-                        onChange={(e) => setConciergeInput(e.target.value)}
-                        autoFocus
+                        className="flex-1 bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-neon-blue outline-none transition-colors"
+                        placeholder="Type a message..."
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        disabled={isChatLoading}
                       />
                       <button 
-                        disabled={conciergeLoading}
-                        className="absolute right-2 top-2 p-2 bg-neon-blue/10 rounded-lg text-neon-blue hover:bg-neon-blue hover:text-black transition-colors"
+                        disabled={isChatLoading || !chatInput.trim()}
+                        className="bg-neon-blue text-black p-3 rounded-xl hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                          {conciergeLoading ? <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"/> : <ArrowRight size={20} />}
+                          {isChatLoading ? <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"/> : <Send size={20} />}
                       </button>
                   </form>
-
-                  {conciergeResponse && (
-                      <div className="mt-4 p-4 bg-neon-blue/5 border border-neon-blue/20 rounded-xl">
-                          <p className="text-sm text-gray-300 italic">"{conciergeResponse}"</p>
-                          {recommendedEventId && (
-                              <button 
-                                onClick={() => { 
-                                    setShowConcierge(false); 
-                                    if (recommendedEventId) addToCart(recommendedEventId); 
-                                }}
-                                className="mt-3 w-full bg-neon-blue text-black font-bold py-2 rounded-lg text-sm hover:bg-white transition-colors"
-                              >
-                                  Add to Cart
-                              </button>
-                          )}
-                      </div>
-                  )}
               </div>
           </div>
       );
@@ -571,7 +699,7 @@ export default function App() {
                         )}
                     </button>
                     <button 
-                        onClick={() => setShowConcierge(true)}
+                        onClick={openConciergeModal}
                         className="w-10 h-10 rounded-full bg-neon-blue/10 border border-neon-blue/30 text-neon-blue flex items-center justify-center hover:bg-neon-blue hover:text-black transition-colors"
                     >
                         <Bot size={20} />
@@ -597,24 +725,38 @@ export default function App() {
                     const cartQty = cart[event.id] || 0;
                     const hasMaxTickets = (myTickets + cartQty) >= 4;
                     const isSoldOut = event.soldTickets >= event.totalTickets;
-                    
+                    const isMapVisible = visibleMapId === event.id;
+
                     return (
                         <div key={event.id} className={`group relative overflow-hidden rounded-3xl bg-dark-800/80 border transition-all hover:shadow-[0_0_30px_-10px_rgba(0,255,157,0.15)] ${recommendedEventId === event.id ? 'border-neon-blue ring-2 ring-neon-blue shadow-[0_0_30px_rgba(0,243,255,0.3)]' : 'border-white/5 hover:border-neon-green/30'}`}>
                             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-dark-900/60 to-dark-900 z-10 pointer-events-none"></div>
                             
-                            <div className="h-48 relative overflow-hidden">
-                                <img src={event.image} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={event.name} />
-                                <div className="absolute top-4 right-4 z-20 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 text-sm font-bold flex items-center gap-1">
-                                    <span className="text-neon-green">$</span>
-                                    {event.price}
-                                </div>
-                                <div className="absolute bottom-4 left-4 z-20 flex gap-1 flex-wrap pr-4">
-                                    {event.tags.map(tag => (
-                                        <span key={tag} className="text-[10px] bg-black/60 backdrop-blur text-white border border-white/10 px-2 py-1 rounded-md">
-                                            {tag}
-                                        </span>
-                                    ))}
-                                </div>
+                            <div className="h-48 relative overflow-hidden bg-gray-900">
+                                {isMapVisible ? (
+                                    <iframe
+                                        width="100%"
+                                        height="100%"
+                                        style={{ border: 0 }}
+                                        loading="lazy"
+                                        allowFullScreen
+                                        src={`https://www.google.com/maps?q=${encodeURIComponent(event.venue)}&output=embed`}
+                                    ></iframe>
+                                ) : (
+                                    <>
+                                        <img src={event.image} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={event.name} />
+                                        <div className="absolute top-4 right-4 z-20 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 text-sm font-bold flex items-center gap-1">
+                                            <span className="text-neon-green">$</span>
+                                            {event.price}
+                                        </div>
+                                        <div className="absolute bottom-4 left-4 z-20 flex gap-1 flex-wrap pr-4">
+                                            {event.tags.map(tag => (
+                                                <span key={tag} className="text-[10px] bg-black/60 backdrop-blur text-white border border-white/10 px-2 py-1 rounded-md">
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                             
                             <div className="p-6 relative z-20 -mt-2">
@@ -634,11 +776,18 @@ export default function App() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <MapPin size={14} className="text-gray-500" />
-                                        <span>{event.venue}</span>
+                                        <span className="truncate max-w-[200px]">{event.venue}</span>
                                     </div>
                                 </div>
                                 
                                 <div className="flex gap-2">
+                                     <button 
+                                        onClick={() => setVisibleMapId(isMapVisible ? null : event.id)}
+                                        className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-colors ${isMapVisible ? 'bg-neon-blue text-black border-neon-blue' : 'bg-dark-700 border-white/10 hover:border-white/30 text-white'}`}
+                                     >
+                                        <Map size={20} />
+                                     </button>
+
                                     <button 
                                         onClick={() => !hasMaxTickets && !isSoldOut && addToCart(event.id)}
                                         disabled={hasMaxTickets || isSoldOut}
@@ -815,7 +964,38 @@ export default function App() {
                   </div>
                   <div>
                       <label className="text-xs text-gray-500 font-mono block mb-1 uppercase">Venue Location</label>
-                      <input required className="w-full bg-dark-800 border border-dark-700 rounded-xl p-4 text-white focus:border-neon-purple outline-none transition-colors" value={newEvent.venue} onChange={e => setNewEvent({...newEvent, venue: e.target.value})} placeholder="e.g. Sector 7"/>
+                      <div className="flex gap-2">
+                          <input 
+                            required 
+                            className="flex-1 bg-dark-800 border border-dark-700 rounded-xl p-4 text-white focus:border-neon-purple outline-none transition-colors" 
+                            value={newEvent.venue} 
+                            onChange={e => setNewEvent({...newEvent, venue: e.target.value})} 
+                            placeholder="e.g. Sector 7 or 'Chase Center'"
+                          />
+                          <button 
+                            type="button"
+                            onClick={handleVerifyLocation}
+                            disabled={verifyingLocation || !newEvent.venue}
+                            className="bg-dark-700 border border-dark-600 rounded-xl px-4 flex items-center justify-center text-neon-blue hover:bg-neon-blue hover:text-black transition-colors disabled:opacity-50"
+                          >
+                             {verifyingLocation ? <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"/> : <Map size={20} />}
+                          </button>
+                      </div>
+                      
+                      {/* Map Preview for Organizer */}
+                      {newEvent.venue && !verifyingLocation && (
+                          <div className="mt-2 h-40 w-full rounded-xl overflow-hidden border border-white/10 relative group">
+                               <iframe
+                                    width="100%"
+                                    height="100%"
+                                    style={{ border: 0 }}
+                                    loading="lazy"
+                                    allowFullScreen
+                                    src={`https://www.google.com/maps?q=${encodeURIComponent(newEvent.venue)}&output=embed`}
+                                ></iframe>
+                                <div className="absolute inset-0 pointer-events-none border border-neon-purple/30 rounded-xl"></div>
+                          </div>
+                      )}
                   </div>
                   <div>
                       <label className="text-xs text-gray-500 font-mono block mb-1 uppercase">Tags / Categories</label>
