@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Ticket, ScanResult, TicketStatus } from '../../../types';
-import { scanTicket } from '../../../services/api';
+import React, { useState } from 'react';
+import { ScanResult } from '../types';
+import { scanTicket } from '../services/api';
 import { CheckCircle, XCircle, Zap, Shield, Search } from 'lucide-react';
 
 interface ScannerProps {

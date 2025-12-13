@@ -103,9 +103,19 @@ export const logout = () => {
 };
 
 export const getCurrentUser = (): User | null => {
-  const u = localStorage.getItem(STORAGE_KEY_SESSION_USER);
-  if (!u) return null;
-  return JSON.parse(u);
+  try {
+    const u = localStorage.getItem(STORAGE_KEY_SESSION_USER);
+    if (!u) return null;
+
+    const user = JSON.parse(u);
+    return {
+      ...user,
+      id: user.id || user._id
+    };
+  } catch {
+    localStorage.removeItem(STORAGE_KEY_SESSION_USER);
+    return null;
+  }
 };
 
 // --------------------
