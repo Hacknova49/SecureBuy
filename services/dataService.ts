@@ -16,11 +16,11 @@ const MY_DEVICE_ID = localStorage.getItem(STORAGE_KEY_DEVICE)!;
 const INITIAL_EVENTS: Event[] = [
   {
     id: 'evt_001',
-    name: 'Neon Horizon Festival',
+    name: 'Sunburn Arena: Cyber Edition',
     description: 'Experience the ultimate convergence of light and sound at the Cyberdome. Featuring immersive holographic displays and bass that rewrites your DNA.',
     date: '2024-12-15T20:00:00Z',
-    venue: 'Bill Graham Civic Auditorium, San Francisco, CA',
-    price: 150,
+    venue: 'Jawaharlal Nehru Stadium, New Delhi, India',
+    price: 2500,
     image: 'https://picsum.photos/seed/neon/400/200',
     tags: ['Music', 'Cyberpunk', 'Rave', 'Festival'],
     organizerId: 'admin_1',
@@ -29,13 +29,13 @@ const INITIAL_EVENTS: Event[] = [
   },
   {
     id: 'evt_002',
-    name: 'Quantum Jazz Night',
+    name: 'Classical Fusion Night',
     description: 'Smooth synths meet algorithmic improvisation. A sophisticated evening for the discerning audiophile in the heart of the district.',
     date: '2024-12-20T19:00:00Z',
-    venue: 'Blue Note Jazz Club, New York, NY',
-    price: 85,
+    venue: 'Royal Opera House, Mumbai, India',
+    price: 1500,
     image: 'https://picsum.photos/seed/jazz/400/200',
-    tags: ['Music', 'Jazz', 'Chill', 'Nightlife'],
+    tags: ['Music', 'Classical', 'Chill', 'Nightlife'],
     organizerId: 'admin_1',
     totalTickets: 200,
     soldTickets: 150

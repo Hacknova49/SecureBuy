@@ -245,7 +245,7 @@ export default function App() {
           const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
           const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash',
-              contents: `Write a high-energy, cyberpunk-themed 2-sentence marketing description for: ${newEvent.name} at ${newEvent.venue}. Price: $${newEvent.price}. Tone: Exciting, futuristic.`
+              contents: `Write a high-energy, cyberpunk-themed 2-sentence marketing description for: ${newEvent.name} at ${newEvent.venue}. Price: ₹${newEvent.price}. Tone: Exciting, futuristic.`
           });
           setNewEvent(prev => ({ ...prev, description: response.text }));
       } catch (error) {
@@ -262,7 +262,7 @@ export default function App() {
       
       const eventsContext = allEvents.map(e => {
         const soldOut = e.soldTickets >= e.totalTickets;
-        return `ID: ${e.id} | Name: ${e.name} | Venue: ${e.venue} | Tags: ${e.tags.join(', ')} | Price: $${e.price} | Status: ${soldOut ? 'SOLD OUT' : 'Available'}`;
+        return `ID: ${e.id} | Name: ${e.name} | Venue: ${e.venue} | Tags: ${e.tags.join(', ')} | Price: ₹${e.price} | Status: ${soldOut ? 'SOLD OUT' : 'Available'}`;
       }).join('\n');
 
       let location = undefined;
@@ -285,7 +285,7 @@ export default function App() {
                 Your Goal: Help users find events, check availability, or locate venues.
                 
                 Rules:
-                1. If asked about location/distance, use the googleMaps tool.
+                1. If asked about location/distance, use the googleMaps tool. Assume the user is in India unless they specify otherwise.
                 2. Be concise, friendly, and futuristic.
                 3. If you recommend a specific event, include its ID at the end of your response in this format: [ID:evt_xxxx].
                 4. If an event is SOLD OUT, warn the user.
@@ -398,7 +398,7 @@ export default function App() {
                         <div className="w-20 h-20 bg-dark-800/50 backdrop-blur-md rounded-2xl flex items-center justify-center text-neon-green border border-white/10 shadow-[0_0_40px_-10px_rgba(0,255,157,0.3)] mb-6 animate-pulse-fast">
                             <Fingerprint size={40} />
                         </div>
-                        <h1 className="text-4xl font-bold text-center mb-2 tracking-tight">DynaTick</h1>
+                        <h1 className="text-4xl font-bold text-center mb-2 tracking-tight">SecureBuy</h1>
                         <p className="text-center text-gray-400 font-mono text-sm">SECURE IDENTITY PROTOCOL</p>
                     </div>
 
@@ -526,7 +526,7 @@ export default function App() {
                                     <div key={id} className="bg-white/5 p-4 rounded-xl flex items-center justify-between">
                                         <div>
                                             <h4 className="font-bold text-white text-sm">{evt.name}</h4>
-                                            <p className="text-xs text-neon-green">${evt.price} x {qty}</p>
+                                            <p className="text-xs text-neon-green">₹{evt.price} x {qty}</p>
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <button onClick={() => removeFromCart(id)} className="w-8 h-8 rounded-full bg-black flex items-center justify-center border border-white/10 hover:border-white/30 text-white">-</button>
@@ -546,7 +546,7 @@ export default function App() {
                 <div className="p-6 border-t border-white/10 bg-dark-800 rounded-b-2xl">
                     <div className="flex justify-between mb-4 text-lg font-bold">
                         <span className="text-gray-400">Total</span>
-                        <span className="text-white">${totalPrice.toLocaleString()}</span>
+                        <span className="text-white">₹{totalPrice.toLocaleString()}</span>
                     </div>
                     {cartError && (
                         <div className="mb-4 text-xs text-red-400 bg-red-900/20 p-2 rounded border border-red-500/20">
@@ -629,7 +629,7 @@ export default function App() {
                                               <div className="h-24 relative">
                                                   <img src={evt.image} className="w-full h-full object-cover" alt={evt.name} />
                                                   <div className="absolute top-2 right-2 bg-black/70 backdrop-blur px-2 py-0.5 rounded text-[10px] font-bold text-neon-green border border-white/10">
-                                                      ${evt.price}
+                                                      ₹{evt.price}
                                                   </div>
                                               </div>
                                               <div className="p-3">
@@ -745,7 +745,7 @@ export default function App() {
                                     <>
                                         <img src={event.image} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={event.name} />
                                         <div className="absolute top-4 right-4 z-20 bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 text-sm font-bold flex items-center gap-1">
-                                            <span className="text-neon-green">$</span>
+                                            <span className="text-neon-green">₹</span>
                                             {event.price}
                                         </div>
                                         <div className="absolute bottom-4 left-4 z-20 flex gap-1 flex-wrap pr-4">
@@ -910,7 +910,7 @@ export default function App() {
                         <DollarSign size={40} />
                     </div>
                     <p className="text-gray-500 text-[10px] font-mono uppercase mb-2">Revenue</p>
-                    <p className="text-2xl font-bold text-white">${totalSales.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-white">₹{totalSales.toLocaleString()}</p>
                 </div>
                 <div className="bg-gradient-to-br from-dark-800 to-dark-900 p-5 rounded-2xl border border-white/5 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -1025,7 +1025,7 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                        <div>
-                            <label className="text-xs text-gray-500 font-mono block mb-1 uppercase">Price (USD)</label>
+                            <label className="text-xs text-gray-500 font-mono block mb-1 uppercase">Price (INR)</label>
                             <input required type="number" className="w-full bg-dark-800 border border-dark-700 rounded-xl p-4 text-white focus:border-neon-purple outline-none transition-colors" value={newEvent.price} onChange={e => setNewEvent({...newEvent, price: e.target.value})} />
                         </div>
                         <div>

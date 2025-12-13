@@ -1,5 +1,5 @@
 {
-  "name": "DynaTick: Identity-Bound Ticketing",
+  "name": "SecureBuy: Identity-Bound Ticketing",
   "description": "A secure, dynamic ticketing system using TOTP-based QR codes and device fingerprinting to prevent ticket scalping and unauthorized sharing.",
   "requestFramePermissions": [
     "camera",
