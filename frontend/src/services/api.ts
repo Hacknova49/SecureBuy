@@ -9,11 +9,10 @@ import {
 
 const API_URL = 'http://localhost:5000/api';
 
-/** Utility type */
 type WithId<T> = T & { id: string };
 
 // --------------------
-// Device ID
+// DEVICE ID
 // --------------------
 const STORAGE_KEY_DEVICE = 'dynaTick_deviceId';
 const STORAGE_KEY_SESSION_USER = 'session_user';
@@ -29,7 +28,7 @@ export const getMyDeviceId = () =>
   localStorage.getItem(STORAGE_KEY_DEVICE)!;
 
 // --------------------
-// Central API Fetcher
+// API FETCHER
 // --------------------
 async function apiFetch<T>(
   endpoint: string,
@@ -67,7 +66,6 @@ export const registerOrLogin = async (
     })
   });
 
-  // Normalize MongoDB _id → id
   const user: User = {
     ...data.user,
     id: data.user._id
@@ -75,10 +73,7 @@ export const registerOrLogin = async (
 
   localStorage.setItem(STORAGE_KEY_SESSION_USER, JSON.stringify(user));
 
-  return {
-    user,
-    isNew: data.isNew
-  };
+  return { user, isNew: data.isNew };
 };
 
 export const recoverAccount = async (
@@ -110,12 +105,7 @@ export const logout = () => {
 export const getCurrentUser = (): User | null => {
   const u = localStorage.getItem(STORAGE_KEY_SESSION_USER);
   if (!u) return null;
-
-  const user = JSON.parse(u);
-  return {
-    ...user,
-    id: user.id || user._id
-  };
+  return JSON.parse(u);
 };
 
 // --------------------
@@ -175,7 +165,7 @@ export const scanTicket = async (
 };
 
 // --------------------
-// AI SERVICES
+// AI
 // --------------------
 export const generateHype = async (
   name: string,

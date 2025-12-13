@@ -8,11 +8,12 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "@google/genai": "^1.33.0",
+    "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "mongoose": "^8.3.4",
-    "@google/genai": "^1.33.0"
+    "mongoose": "^8.3.4"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
