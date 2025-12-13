@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+// In src/server.ts
+
 import { UserModel, EventModel, TicketModel } from './models';
 
 dotenv.config();
