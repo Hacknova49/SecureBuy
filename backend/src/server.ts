@@ -15,8 +15,7 @@ app.use(express.json());
 
 /* ================= DATABASE ================= */
 const MONGO_URI =
-  process.env.MONGODB_URI ||
-  'mongodb://127.0.0.1:27017/securebuy';
+  process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/securebuy';
 
 mongoose
   .connect(MONGO_URI)
@@ -32,8 +31,12 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+/**
+ * ✅ WORKING MODEL for this SDK
+ */
 const geminiModel = genAI.getGenerativeModel({
-  model: 'models/gemini-1.5-flash'
+  model: 'gemini-2.5-flash'
 });
 
 /* ================= TOTP ================= */
@@ -59,7 +62,10 @@ app.post('/api/auth/login', async (req, res) => {
     let user = await UserModel.findOne({ email });
 
     if (!user) {
-      const recoveryCode = `REC-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      const recoveryCode = `REC-${crypto
+        .randomBytes(3)
+        .toString('hex')
+        .toUpperCase()}`;
 
       user = await UserModel.create({
         email,
@@ -109,9 +115,7 @@ app.post('/api/tickets/purchase', async (req, res) => {
     const { userId, eventId, deviceId } = req.body;
 
     const event = await EventModel.findById(eventId);
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
-    }
+    if (!event) return res.status(404).json({ error: 'Event not found' });
 
     if (event.soldTickets >= event.totalTickets) {
       return res.status(400).json({ error: 'Event sold out' });
@@ -158,23 +162,33 @@ app.post('/api/tickets/scan', async (req, res) => {
 
 /* ================= AI ================= */
 app.post('/api/ai/hype', async (req, res) => {
-  const { name, venue, price } = req.body;
+  try {
+    const { name, venue, price } = req.body;
 
-  const result = await geminiModel.generateContent(
-    `Write a high-energy, cyberpunk-style event description for ${name} at ${venue}. Ticket price ₹${price}.`
-  );
+    const result = await geminiModel.generateContent(
+      `Write a high-energy cyberpunk-style event description for ${name} at ${venue}. Ticket price ₹${price}.`
+    );
 
-  res.json({ text: result.response.text() });
+    res.json({ text: result.response.text() });
+  } catch (err: any) {
+    console.error('AI HYPE ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/ai/chat', async (req, res) => {
-  const { message, context } = req.body;
+  try {
+    const { message, context } = req.body;
 
-  const result = await geminiModel.generateContent(
-    `Context:\n${context}\n\nUser:\n${message}`
-  );
+    const result = await geminiModel.generateContent(
+      `You are an event concierge AI.\n\nContext:\n${context}\n\nUser:\n${message}`
+    );
 
-  res.json({ reply: result.response.text() });
+    res.json({ reply: result.response.text() });
+  } catch (err: any) {
+    console.error('AI CHAT ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /* ================= START ================= */
