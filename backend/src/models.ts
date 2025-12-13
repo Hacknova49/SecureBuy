@@ -1,39 +1,76 @@
 import mongoose from 'mongoose';
 
-const UserSchema = new mongoose.Schema({
-  name: String,
-  email: { type: String, unique: true, required: true },
-  avatarUrl: String,
-  boundDeviceId: { type: String, default: '' },
-  recoveryCode: String,
-  role: { type: String, enum: ['USER', 'MANAGER'], default: 'USER' }
-});
+/* -------------------- USER -------------------- */
+const UserSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String, unique: true, required: true },
+    avatarUrl: String,
+    boundDeviceId: { type: String, default: '' },
+    recoveryCode: String,
+    role: {
+      type: String,
+      enum: ['USER', 'MANAGER'],
+      default: 'USER'
+    }
+  },
+  { timestamps: true }
+);
 
-const EventSchema = new mongoose.Schema({
-  name: String,
-  description: String,
-  date: Date,
-  venue: String,
-  price: Number,
-  image: String,
-  tags: [String],
-  organizerId: String,
-  totalTickets: Number,
-  soldTickets: { type: Number, default: 0 }
-});
+/* -------------------- EVENT -------------------- */
+const EventSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    description: String,
+    date: { type: Date, required: true },
+    venue: { type: String, required: true },
+    price: { type: Number, required: true },
+    image: {
+      type: String,
+      default: 'https://picsum.photos/seed/event/600/400'
+    },
+    tags: [String],
+    organizerId: { type: String, required: true },
+    totalTickets: { type: Number, required: true },
+    soldTickets: { type: Number, default: 0 }
+  },
+  { timestamps: true }
+);
 
-const TicketSchema = new mongoose.Schema({
-  eventId: String,
-  eventName: String,
-  eventDate: Date,
-  venue: String,
-  userId: String,
-  status: { type: String, enum: ['ACTIVE', 'USED', 'REVOKED'], default: 'ACTIVE' },
-  boundDeviceId: String,
-  seedSecret: String,
-  purchaseDate: { type: Date, default: Date.now }
-});
+/* -------------------- TICKET -------------------- */
+const TicketSchema = new mongoose.Schema(
+  {
+    eventId: { type: String, required: true, index: true },
+    eventName: { type: String, required: true },
+    eventDate: { type: Date, required: true },
+    venue: { type: String, required: true },
 
-export const UserModel = mongoose.model('User', UserSchema);
-export const EventModel = mongoose.model('Event', EventSchema);
-export const TicketModel = mongoose.model('Ticket', TicketSchema);
+    userId: { type: String, required: true, index: true },
+
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'USED', 'REVOKED'],
+      default: 'ACTIVE'
+    },
+
+    boundDeviceId: { type: String, required: true },
+
+    seedSecret: {
+      type: String,
+      required: true
+    },
+
+    purchaseDate: { type: Date, default: Date.now }
+  },
+  { timestamps: true }
+);
+
+/* -------------------- MODELS -------------------- */
+export const UserModel =
+  mongoose.models.User || mongoose.model('User', UserSchema);
+
+export const EventModel =
+  mongoose.models.Event || mongoose.model('Event', EventSchema);
+
+export const TicketModel =
+  mongoose.models.Ticket || mongoose.model('Ticket', TicketSchema);
