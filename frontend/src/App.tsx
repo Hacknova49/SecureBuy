@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Navigation } from './components/Navigation';
-import { ViewMode, Ticket, ScanResult, User, UserRole, Event } from './types';
+import { Navigation } from '../../components/Navigation';
+import { ViewMode, Ticket, ScanResult, User, UserRole, Event } from '../../types';
 // Updated Imports from api.ts
 import { getTicketsForUser, getMyDeviceId, getCurrentUser, registerOrLogin, logout, getEvents, purchaseTicket, createEvent, recoverAccount, generateHype, chatConcierge } from './services/api';
-import { SecureQR } from './components/SecureQR';
-import { Scanner, ScanResultDisplay } from './components/Scanner';
+import { SecureQR } from '../../components/SecureQR';
+import { Scanner, ScanResultDisplay } from '../../components/Scanner';
 import { Ticket as TicketIcon, Calendar, MapPin, ShieldCheck, LogOut, Lock, Fingerprint, ShoppingBag, AlertCircle, UserCircle, Briefcase, Plus, Users, ArrowRight, DollarSign, Key, Check, Sparkles, Bot, Tag, ShoppingCart, Trash2, X, Map, Send } from 'lucide-react';
 
 // Chat Message Interface

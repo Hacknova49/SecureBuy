@@ -1,4 +1,4 @@
-import { Ticket, User, Event, UserRole, ScanResult } from '../types';
+import { Ticket, User, Event, UserRole, ScanResult } from '../../../types';
 
 const API_URL = 'http://localhost:5000/api';
 
