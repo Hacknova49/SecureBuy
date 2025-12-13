@@ -1,29 +1,30 @@
 {
   "compilerOptions": {
+    // Target modern Node.js features
     "target": "ES2022",
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
-    "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    
+    // **CRITICAL FIX 1:** Use CommonJS module system (standard for Node.js)
+    "module": "CommonJS", 
+    
+    // **CRITICAL FIX 2:** Use Node.js module resolution strategy 
+    "moduleResolution": "node",
+    
+    // Allow standard ES import syntax (`import`) to work with CommonJS
+    "esModuleInterop": true,
+
+    // Standard library definitions (backend-only)
+    "lib": ["ES2022"],
+    
+    // General config
     "skipLibCheck": true,
-    "types": [
-      "node"
-    ],
-    "moduleResolution": "bundler",
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "allowJs": true,
-    "jsx": "react-jsx",
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
-    "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "types": ["node"],
+    "isolatedModules": false, 
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true
+  },
+  
+  // Include all .ts files in the src folder of the backend
+  "include": ["backend/src/**/*.ts"], 
+  "exclude": ["node_modules"]
 }
