@@ -1,7 +1,7 @@
 # SecureBuy: Full Stack Identity-Bound Ticketing
 SecureBuy is a next-generation event ticketing platform designed to eliminate ticket fraud, bot purchases, and unauthorized ticket sharing. By combining device-bound tickets, rotating QR codes, and AI-powered verification, SecureBuy ensures that every ticket is used only by its rightful owner.
 
-#🚨 Problem Statement
+# 🚨 Problem Statement
 A production-ready implementation of SecureBuy using the MERN stack (MongoDB, Express, React, Node.js).
 Traditional ticketing systems rely on static QR codes or PDFs, which can be:
 
