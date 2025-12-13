@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Navigation } from './components/Navigation';
 import { ViewMode, Ticket, ScanResult, User, UserRole, Event } from './types';
-import { getTicketsForUser, getMyDeviceId, getCurrentUser, registerOrLogin, logout, getEvents, purchaseTicket, createEvent, recoverAccount } from './services/dataService';
+import { getTicketsForUser, getMyDeviceId, getCurrentUser, registerOrLogin, logout, getEvents, purchaseTicket, createEvent, recoverAccount, generateHype, chatConcierge } from './services/api';
 import { SecureQR } from './components/SecureQR';
 import { Scanner, ScanResultDisplay } from './components/Scanner';
 import { Ticket as TicketIcon, Calendar, MapPin, ShieldCheck, LogOut, Lock, Fingerprint, ShoppingBag, AlertCircle, UserCircle, Briefcase, Plus, Users, ArrowRight, DollarSign, Key, Check, Sparkles, Bot, Tag, ShoppingCart, Trash2, X, Map, Send } from 'lucide-react';
-import { GoogleGenAI, Chat } from "@google/genai";
 
 // Chat Message Interface
 interface ChatMessage {
     role: 'user' | 'model';
     text: string;
-    eventId?: string; // If the AI recommends a specific event
-    grounding?: any[]; // Google Maps grounding data
+    eventId?: string;
+    grounding?: any[];
     timestamp: number;
 }
 
@@ -24,8 +23,6 @@ export default function App() {
   const [deviceId, setDeviceId] = useState<string>('');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [allEvents, setAllEvents] = useState<Event[]>([]);
-
-  // State to highlight AI-recommended events
   const [recommendedEventId, setRecommendedEventId] = useState<string | null>(null);
 
   // Auth Form State
@@ -60,7 +57,6 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const chatSessionRef = useRef<Chat | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -78,13 +74,20 @@ export default function App() {
       }
   }, [chatMessages, showConcierge]);
 
-  const initUserData = (u: User) => {
-      setAllEvents(getEvents());
-      if (u.role === 'USER') {
-          setTickets(getTicketsForUser(u.id));
-          setMode('MARKET');
-      } else {
-          setMode('ADMIN');
+  const initUserData = async (u: User) => {
+      // Async Data Fetching
+      try {
+        const evts = await getEvents();
+        setAllEvents(evts);
+        if (u.role === 'USER') {
+            const tix = await getTicketsForUser(u.id);
+            setTickets(tix);
+            setMode('MARKET');
+        } else {
+            setMode('ADMIN');
+        }
+      } catch (e) {
+        console.error("Failed to load data", e);
       }
   };
 
@@ -96,12 +99,12 @@ export default function App() {
       if (isRecoveryMode) {
           const recoveredUser = await recoverAccount(email, recoveryCode);
           setUser(recoveredUser);
-          initUserData(recoveredUser);
+          await initUserData(recoveredUser);
           setIsRecoveryMode(false);
       } else {
           const { user: u, isNew } = await registerOrLogin(email, name, role);
           setUser(u);
-          initUserData(u);
+          await initUserData(u);
           
           if (isNew && u.role === 'USER' && u.recoveryCode) {
               setNewRegistrationCode(u.recoveryCode);
@@ -177,7 +180,8 @@ export default function App() {
                   await purchaseTicket(user, eventId);
               }
           }
-          setTickets(getTicketsForUser(user.id));
+          const tix = await getTicketsForUser(user.id);
+          setTickets(tix);
           setCart({});
           setShowCart(false);
           setMode('USER');
@@ -185,31 +189,16 @@ export default function App() {
           setCartError(e.message || "Checkout failed partway through.");
       } finally {
           setIsCheckingOut(false);
-          setAllEvents(getEvents());
+          const evts = await getEvents();
+          setAllEvents(evts);
       }
   };
 
   // --- Create Event & AI ---
 
   const handleVerifyLocation = async () => {
-      if (!newEvent.venue || !process.env.API_KEY) return;
-      setVerifyingLocation(true);
-
-      try {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-          const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
-              contents: `Locate this place: "${newEvent.venue}". Return the full address.`,
-              config: { tools: [{ googleMaps: {} }] }
-          });
-          if (response.text) {
-              setNewEvent(prev => ({ ...prev, venue: response.text.trim() }));
-          }
-      } catch (e) {
-          console.error("Loc Verify Failed", e);
-      } finally {
-          setVerifyingLocation(false);
-      }
+     // Location verification can be added to backend later
+     // For now we accept input
   };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
@@ -228,7 +217,8 @@ export default function App() {
             tags: tagArray,
             date: new Date().toISOString()
         });
-        setAllEvents(getEvents());
+        const evts = await getEvents();
+        setAllEvents(evts);
         setNewEvent({ name: '', venue: '', price: '', total: '', description: '', tags: '' });
         setMode('ADMIN');
       } catch (err) {
@@ -239,15 +229,11 @@ export default function App() {
   }
 
   const handleGenerateHype = async () => {
-      if (!newEvent.name || !newEvent.venue || !process.env.API_KEY) return;
+      if (!newEvent.name || !newEvent.venue) return;
       setIsGeneratingHype(true);
       try {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-          const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash',
-              contents: `Write a high-energy, cyberpunk-themed 2-sentence marketing description for: ${newEvent.name} at ${newEvent.venue}. Price: ₹${newEvent.price}. Tone: Exciting, futuristic.`
-          });
-          setNewEvent(prev => ({ ...prev, description: response.text }));
+          const text = await generateHype(newEvent.name, newEvent.venue, newEvent.price);
+          setNewEvent(prev => ({ ...prev, description: text }));
       } catch (error) {
           console.error("AI Gen failed", error);
       } finally {
@@ -255,65 +241,25 @@ export default function App() {
       }
   };
 
-  // --- AI Concierge Logic ---
-
-  const startConciergeSession = async () => {
-      if (!process.env.API_KEY) return;
-      
-      const eventsContext = allEvents.map(e => {
-        const soldOut = e.soldTickets >= e.totalTickets;
-        return `ID: ${e.id} | Name: ${e.name} | Venue: ${e.venue} | Tags: ${e.tags.join(', ')} | Price: ₹${e.price} | Status: ${soldOut ? 'SOLD OUT' : 'Available'}`;
-      }).join('\n');
-
-      let location = undefined;
-        try {
-             const pos: any = await new Promise((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
-             });
-             location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-        } catch (e) { /* ignore location error */ }
-
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const chat = ai.chats.create({
-          model: 'gemini-2.5-flash',
-          config: {
-              systemInstruction: `
-                You are "Nexus", a cyberpunk event concierge.
-                Available Events Data:
-                ${eventsContext}
-
-                Your Goal: Help users find events, check availability, or locate venues.
-                
-                Rules:
-                1. If asked about location/distance, use the googleMaps tool. Assume the user is in India unless they specify otherwise.
-                2. Be concise, friendly, and futuristic.
-                3. If you recommend a specific event, include its ID at the end of your response in this format: [ID:evt_xxxx].
-                4. If an event is SOLD OUT, warn the user.
-              `,
-              tools: [{ googleMaps: {} }],
-              toolConfig: location ? { retrievalConfig: { latLng: location } } : undefined
-          }
-      });
-      chatSessionRef.current = chat;
-      setChatMessages([{
-          role: 'model',
-          text: "Systems online. I am Nexus. Looking for a specific vibe or location tonight?",
-          timestamp: Date.now()
-      }]);
-  };
+  // --- AI Concierge Logic (Backend Proxy) ---
 
   const handleConciergeSend = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!chatInput.trim() || !chatSessionRef.current) return;
+      if (!chatInput.trim()) return;
       
       const userMsg: ChatMessage = { role: 'user', text: chatInput, timestamp: Date.now() };
       setChatMessages(prev => [...prev, userMsg]);
       setChatInput('');
       setIsChatLoading(true);
 
+      const eventsContext = allEvents.map(e => {
+        const soldOut = e.soldTickets >= e.totalTickets;
+        return `ID: ${e.id} | Name: ${e.name} | Venue: ${e.venue} | Tags: ${e.tags.join(', ')} | Price: ₹${e.price} | Status: ${soldOut ? 'SOLD OUT' : 'Available'}`;
+      }).join('\n');
+
       try {
-          const result = await chatSessionRef.current.sendMessage({ message: userMsg.text });
-          const text = result.text;
+          const result = await chatConcierge(userMsg.text, eventsContext);
+          const text = result.text || "Connection error.";
           
           // Parse for Event ID
           const match = text.match(/\[ID:(.*?)\]/);
@@ -324,14 +270,11 @@ export default function App() {
             setRecommendedEventId(recommendedId);
           }
 
-          // Get Grounding
-          const grounding = result.candidates?.[0]?.groundingMetadata?.groundingChunks;
-
           const aiMsg: ChatMessage = {
               role: 'model',
               text: cleanText,
               eventId: recommendedId,
-              grounding: grounding,
+              grounding: result.grounding,
               timestamp: Date.now()
           };
           setChatMessages(prev => [...prev, aiMsg]);
@@ -346,7 +289,11 @@ export default function App() {
   const openConciergeModal = () => {
       setShowConcierge(true);
       if (chatMessages.length === 0) {
-          startConciergeSession();
+          setChatMessages([{
+              role: 'model',
+              text: "Systems online. I am Nexus. Looking for a specific vibe or location tonight?",
+              timestamp: Date.now()
+          }]);
       }
   };
 

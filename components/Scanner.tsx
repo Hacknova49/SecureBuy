@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Ticket, ScanResult, TicketStatus } from '../types';
-import { OTPService } from '../services/otpService';
-import { getTicketById } from '../services/dataService';
+import { scanTicket } from '../services/api';
 import { CheckCircle, XCircle, Zap, Shield, Search } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 
 interface ScannerProps {
   onScanComplete: (result: ScanResult) => void;
@@ -29,72 +27,23 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
 
     const [ticketId, token] = manualInput.split('::');
     
-    // Simulate network latency
-    await new Promise(r => setTimeout(r, 600));
-
-    const ticket = getTicketById(ticketId);
-
-    if (!ticket) {
-        setProcessing(false);
-        onScanComplete({
-            valid: false,
-            message: "Ticket Not Found in Database",
-            timestamp: new Date().toISOString()
-        });
-        return;
-    }
-
-    const isValidToken = OTPService.validateTOTP(ticket.seedSecret, token, 15);
-
-    if (ticket.status !== TicketStatus.ACTIVE) {
-        setProcessing(false);
-         onScanComplete({
-            valid: false,
-            message: `Ticket Status: ${ticket.status}`,
-            ticket,
-            timestamp: new Date().toISOString()
-        });
-        return;
-    }
-
-    if (isValidToken) {
-        if (process.env.API_KEY) {
-            try {
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: `
-                        Analyze this ticket scan for risk.
-                        Ticket ID: ${ticket.id}
-                        Event: ${ticket.eventName}
-                        User Name: Mock User
-                        Scan Time: ${new Date().toLocaleTimeString()}
-                        Token Valid: Yes
-                        
-                        Return a short, 1-sentence risk assessment for the security guard.
-                    `
-                });
-                setAiAnalysis(response.text);
-            } catch (e) {
-                console.error("AI Analysis failed", e);
-            }
+    try {
+        const result = await scanTicket(ticketId, token);
+        
+        if (result.valid && (result as any).riskAnalysis) {
+             setAiAnalysis((result as any).riskAnalysis);
         }
 
-        onScanComplete({
-            valid: true,
-            message: "Access Granted",
-            ticket,
-            timestamp: new Date().toISOString()
-        });
-    } else {
+        onScanComplete(result);
+    } catch (e) {
         onScanComplete({
             valid: false,
-            message: "Expired or Invalid Dynamic Token",
-            ticket,
+            message: "Server Verification Failed",
             timestamp: new Date().toISOString()
         });
+    } finally {
+        setProcessing(false);
     }
-    setProcessing(false);
   };
 
   return (
@@ -145,7 +94,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScanComplete }) => {
         </div>
       </div>
 
-      {/* AI Analysis Result (Hidden initially in scan mode, but kept for structure) */}
+      {/* AI Analysis Result */}
       {aiAnalysis && (
           <div className="mt-4 p-4 bg-indigo-950/50 border border-indigo-500/30 rounded-xl backdrop-blur-md animate-in slide-in-from-bottom-5">
               <div className="flex items-center gap-2 mb-2">

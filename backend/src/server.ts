@@ -9,7 +9,7 @@ dotenv.config();
 
 const app = express();
 app.use(cors() as any);
-app.use(express.json() as express.RequestHandler);
+app.use(express.json() as any);
 
 // --- Database Connection ---
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/securebuy')
