@@ -10,12 +10,51 @@ import { UserModel, EventModel, TicketModel } from './models';
 dotenv.config();
 
 const app = express();
+app.disable('x-powered-by');
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  next();
+});
 const allowedOrigins = process.env.CORS_ORIGIN
   ?.split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
 app.use(cors({ origin: allowedOrigins?.length ? allowedOrigins : true }));
-app.use(express.json());
+app.use(express.json({ limit: '32kb' }));
+
+type RateLimitEntry = { count: number; resetAt: number };
+const rateLimitEntries = new Map<string, RateLimitEntry>();
+const rateLimitCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitEntries) {
+    if (entry.resetAt <= now) rateLimitEntries.delete(key);
+  }
+}, 60_000);
+rateLimitCleanup.unref();
+const createRateLimiter = (windowMs: number, max: number) => (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const key = `${req.ip}:${req.path}`;
+  const now = Date.now();
+  const current = rateLimitEntries.get(key);
+  const entry = !current || current.resetAt <= now
+    ? { count: 1, resetAt: now + windowMs }
+    : { count: current.count + 1, resetAt: current.resetAt };
+  rateLimitEntries.set(key, entry);
+  res.setHeader('X-RateLimit-Limit', max);
+  res.setHeader('X-RateLimit-Remaining', Math.max(0, max - entry.count));
+  if (entry.count > max) {
+    res.setHeader('Retry-After', Math.ceil((entry.resetAt - now) / 1000));
+    return res.status(429).json({ error: 'Too many requests. Try again later.' });
+  }
+  next();
+};
+
+const apiLimiter = createRateLimiter(60_000, 120);
+const authLimiter = createRateLimiter(15 * 60_000, 10);
+app.use('/api', apiLimiter);
+app.use('/api/auth', authLimiter);
 
 type UserRole = 'USER' | 'MANAGER';
 
@@ -187,7 +226,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({ user: publicUser(user), token: issueSession(user), isNew: false });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('AUTH LOGIN ERROR:', err);
+    res.status(500).json({ error: 'Unable to complete authentication' });
   }
 });
 
@@ -196,20 +236,30 @@ app.post('/api/auth/recover', async (req, res) => {
   if (typeof email !== 'string' || typeof recoveryCode !== 'string' || typeof deviceId !== 'string') {
     return res.status(400).json({ error: 'Email, recovery code, and device ID are required' });
   }
-  const user = await UserModel.findOne({ email: email.trim().toLowerCase() }).select('+recoveryCodeHash +recoveryCode +recoveryCodeExpiresAt');
-  if (!user || user.recoveryCodeExpiresAt && user.recoveryCodeExpiresAt < new Date()) {
-    return res.status(403).json({ error: 'Invalid or expired recovery code' });
+  try {
+    const user = await UserModel.findOne({ email: email.trim().toLowerCase() }).select('+recoveryCodeHash +recoveryCode +recoveryCodeExpiresAt');
+    if (!user || user.recoveryCodeExpiresAt && user.recoveryCodeExpiresAt < new Date()) {
+      return res.status(403).json({ error: 'Invalid or expired recovery code' });
+    }
+    const storedHash = user.recoveryCodeHash || (user.recoveryCode ? hashRecoveryCode(user.recoveryCode) : '');
+    const submittedHash = hashRecoveryCode(recoveryCode);
+    if (
+      !storedHash ||
+      storedHash.length !== submittedHash.length ||
+      !crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(submittedHash))
+    ) {
+      return res.status(403).json({ error: 'Invalid or expired recovery code' });
+    }
+    user.boundDeviceId = deviceId;
+    user.recoveryCodeHash = undefined;
+    user.recoveryCode = undefined;
+    user.recoveryCodeExpiresAt = undefined;
+    await user.save();
+    res.json({ user: publicUser(user), token: issueSession(user) });
+  } catch (err) {
+    console.error('AUTH RECOVERY ERROR:', err);
+    res.status(500).json({ error: 'Unable to recover account' });
   }
-  const storedHash = user.recoveryCodeHash || (user.recoveryCode ? hashRecoveryCode(user.recoveryCode) : '');
-  if (!storedHash || !crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(hashRecoveryCode(recoveryCode)))) {
-    return res.status(403).json({ error: 'Invalid or expired recovery code' });
-  }
-  user.boundDeviceId = deviceId;
-  user.recoveryCodeHash = undefined;
-  user.recoveryCode = undefined;
-  user.recoveryCodeExpiresAt = undefined;
-  await user.save();
-  res.json({ user: publicUser(user), token: issueSession(user) });
 });
 
 /* ================= EVENTS ================= */
@@ -306,7 +356,8 @@ app.post('/api/tickets/purchase', requireAuth, async (req, res) => {
     const { seedSecret: _seedSecret, ...safeTicket } = ticket.toObject();
     res.status(201).json(safeTicket);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('TICKET PURCHASE ERROR:', err);
+    res.status(500).json({ error: 'Unable to purchase ticket' });
   }
 });
 
