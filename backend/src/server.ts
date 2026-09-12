@@ -53,6 +53,22 @@ const SESSION_SECRET =
 const hashRecoveryCode = (code: string) =>
   crypto.createHash('sha256').update(code.trim().toUpperCase()).digest('hex');
 
+const publicUser = (user: {
+  _id: unknown;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  boundDeviceId?: string;
+  role: UserRole;
+}) => ({
+  id: String(user._id),
+  name: user.name,
+  email: user.email,
+  avatarUrl: user.avatarUrl || '',
+  boundDeviceId: user.boundDeviceId || '',
+  role: user.role
+});
+
 const issueSession = (user: { _id: unknown; role: UserRole; boundDeviceId?: string }) => {
   const payload: AuthClaims = {
     userId: String(user._id),
@@ -127,7 +143,12 @@ app.post('/api/auth/login', async (req, res) => {
   const { email, name, role, deviceId } = req.body;
 
   try {
-    if (typeof email !== 'string' || typeof deviceId !== 'string' || !email.trim()) {
+    if (
+      typeof email !== 'string' ||
+      typeof deviceId !== 'string' ||
+      !email.trim() ||
+      !['USER', 'MANAGER'].includes(role)
+    ) {
       return res.status(400).json({ error: 'Email and device ID are required' });
     }
     let user = await UserModel.findOne({ email: email.trim().toLowerCase() }).select('+recoveryCodeHash +recoveryCode +recoveryCodeExpiresAt');
@@ -147,7 +168,12 @@ app.post('/api/auth/login', async (req, res) => {
         recoveryCodeExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30)
       });
 
-      return res.json({ user, token: issueSession(user), isNew: true, recoveryCode });
+      return res.json({
+        user: publicUser(user),
+        token: issueSession(user),
+        isNew: true,
+        recoveryCode
+      });
     }
 
     if (role === 'USER' && user.boundDeviceId && user.boundDeviceId !== deviceId) {
@@ -159,7 +185,7 @@ app.post('/api/auth/login', async (req, res) => {
       await user.save();
     }
 
-    res.json({ user, token: issueSession(user), isNew: false });
+    res.json({ user: publicUser(user), token: issueSession(user), isNew: false });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -183,7 +209,7 @@ app.post('/api/auth/recover', async (req, res) => {
   user.recoveryCode = undefined;
   user.recoveryCodeExpiresAt = undefined;
   await user.save();
-  res.json({ user, token: issueSession(user) });
+  res.json({ user: publicUser(user), token: issueSession(user) });
 });
 
 /* ================= EVENTS ================= */
