@@ -16,7 +16,8 @@ SecureBuy is a React/Vite frontend with a small Express/Mongoose backend. The cu
 | Frontend API client | `frontend/src/services/api.ts` | Single environment-driven API client with session headers |
 | Frontend domain types | `frontend/src/types.ts` | User, event, ticket, scan result, and view-mode types |
 | Backend | `backend/src/server.ts` | Express routes, MongoDB connection, Gemini client, ticket validation |
-| Backend models | `backend/src/models.ts` | Mongoose schemas for users, events, and tickets |
+| Backend models | `backend/src/models.ts` | Existing MongoDB schemas retained for rollback during migration |
+| PostgreSQL schema | `backend/prisma/` | Supabase/PostgreSQL schema, migration, indexes, constraints, and Prisma client foundation |
 | Deployment | `backend/Dockerfile` | Node 20 Alpine image, backend build and start |
 
 ## Implemented user flows
@@ -80,6 +81,7 @@ SecureBuy is a React/Vite frontend with a small Express/Mongoose backend. The cu
 - Frontend `npm run build`: **passes**.
 - No automated test suite was found in the repository.
 - Dependency installation reports known audit findings: 9 backend vulnerabilities and 15 frontend vulnerabilities at audit time. These were not auto-fixed because forced upgrades could introduce breaking changes.
+- Supabase migration foundation: **schema and migration committed; runtime cutover pending**.
 
 ## Highest-priority gaps before production
 
@@ -96,4 +98,4 @@ SecureBuy is a React/Vite frontend with a small Express/Mongoose backend. The cu
 
 ## Recommended next implementation slice
 
-Start with the backend foundation: request validation, authentication/authorization middleware, a consistent environment configuration, and a secure ticket-token contract. Then add atomic inventory and scan state transitions before expanding product features.
+Complete the Supabase cutover with a staging backup, Mongo-to-Postgres data migration, repository adapter, dual-read verification, and rollback-tested production switch.

@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  USER
+  MANAGER
+}
+
+enum TicketStatus {
+  ACTIVE
+  USED
+  REVOKED
+}
+
+model User {
+  id                    String       @id
+  name                  String
+  email                 String       @unique
+  avatarUrl             String?
+  boundDeviceId         String?
+  recoveryCodeHash      String?
+  recoveryCodeExpiresAt DateTime?
+  role                  UserRole     @default(USER)
+  organizedEvents       Event[]      @relation("EventOrganizer")
+  tickets               Ticket[]
+  scans                 TicketScan[] @relation("ScanManager")
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  @@index([role])
+}
+
+model Event {
+  id           String   @id
+  name         String
+  description  String?
+  date         DateTime
+  venue        String
+  price        Decimal  @db.Decimal(12, 2)
+  image        String?
+  tags         String[]
+  organizerId  String
+  totalTickets Int
+  soldTickets  Int      @default(0)
+  organizer    User     @relation("EventOrganizer", fields: [organizerId], references: [id])
+  tickets      Ticket[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([organizerId])
+  @@index([date])
+}
+
+model Ticket {
+  id            String       @id
+  eventId       String
+  eventName     String
+  eventDate     DateTime
+  venue         String
+  userId        String
+  status        TicketStatus @default(ACTIVE)
+  boundDeviceId String
+  seedSecret    String
+  purchaseDate  DateTime     @default(now())
+  event         Event        @relation(fields: [eventId], references: [id])
+  user          User         @relation(fields: [userId], references: [id])
+  scans         TicketScan[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([userId, status])
+  @@index([eventId, status])
+}
+
+model TicketScan {
+  id        String   @id
+  ticketId  String
+  scannedBy String
+  valid     Boolean
+  message   String
+  scannedAt DateTime @default(now())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  manager   User     @relation("ScanManager", fields: [scannedBy], references: [id])
+
+  @@index([ticketId, scannedAt])
+  @@index([scannedBy, scannedAt])
+}

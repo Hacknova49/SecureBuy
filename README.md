@@ -62,4 +62,23 @@ The frontend uses `VITE_API_URL` when set; otherwise it targets the deployed API
 
 ## 🛡️ Security Notes
 *   **API Keys**: The Gemini API key is now stored on the **Backend**. The frontend calls the backend, which proxies the request to Google. This prevents key leakage.
-*   **Database**: All users, tickets, and events are stored in MongoDB.
+*   **Database**: Supabase PostgreSQL is being introduced behind Prisma. MongoDB remains available during the migration/cutover phase.
+
+### Supabase database migration
+
+The backend now includes a versioned PostgreSQL schema in `backend/prisma/`. Configure the Supabase **pooler** connection as `DATABASE_URL` and the direct database connection as `DIRECT_URL`; keep both server-only.
+
+```env
+DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true
+DIRECT_URL=postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres
+```
+
+Apply migrations only after taking a Supabase backup:
+
+```bash
+cd backend
+npm run db:status
+npm run db:migrate
+```
+
+The application still uses MongoDB until the repository layer cutover is completed and verified.
