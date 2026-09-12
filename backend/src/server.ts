@@ -193,8 +193,35 @@ app.get('/api/events', async (_req, res) => {
 });
 
 app.post('/api/events', requireAuth, requireManager, async (req, res) => {
-  const event = await EventModel.create(req.body);
-  res.json(event);
+  const { name, venue, date, price, totalTickets, description, image, tags } = req.body;
+  if (
+    typeof name !== 'string' ||
+    !name.trim() ||
+    typeof venue !== 'string' ||
+    !venue.trim() ||
+    typeof date !== 'string' ||
+    !Number.isFinite(Number(price)) ||
+    Number(price) < 0 ||
+    !Number.isInteger(Number(totalTickets)) ||
+    Number(totalTickets) <= 0 ||
+    Number.isNaN(Date.parse(date))
+  ) {
+    return res.status(400).json({ error: 'Invalid event details' });
+  }
+
+  const auth = (req as AuthenticatedRequest).auth;
+  const event = await EventModel.create({
+    name: name.trim(),
+    venue: venue.trim(),
+    date: new Date(date),
+    price: Number(price),
+    totalTickets: Number(totalTickets),
+    description: typeof description === 'string' ? description.trim() : '',
+    image,
+    tags: Array.isArray(tags) ? tags.filter(tag => typeof tag === 'string').slice(0, 10) : [],
+    organizerId: auth.userId
+  });
+  res.status(201).json(event);
 });
 
 /* ================= TICKETS ================= */
@@ -215,31 +242,43 @@ app.post('/api/tickets/purchase', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'A valid attendee and event are required' });
     }
 
-    const event = await EventModel.findById(eventId);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
+    if (typeof eventId !== 'string' || !eventId.trim()) {
+      return res.status(400).json({ error: 'Event ID is required' });
+    }
 
-    if (event.soldTickets >= event.totalTickets) {
-      return res.status(400).json({ error: 'Event sold out' });
+    const event = await EventModel.findOneAndUpdate(
+      { _id: eventId, $expr: { $lt: ['$soldTickets', '$totalTickets'] } },
+      { $inc: { soldTickets: 1 } },
+      { new: true }
+    );
+    if (!event) {
+      const exists = await EventModel.exists({ _id: eventId });
+      return res.status(exists ? 409 : 404).json({
+        error: exists ? 'Event sold out' : 'Event not found'
+      });
     }
 
     const seedSecret = crypto.randomBytes(20).toString('hex');
 
-    const ticket = await TicketModel.create({
-      eventId: event._id.toString(),
-      eventName: event.name,
-      eventDate: event.date,
-      venue: event.venue,
-      userId: auth.userId,
-      boundDeviceId: auth.deviceId,
-      seedSecret,
-      status: 'ACTIVE'
-    });
-
-    event.soldTickets += 1;
-    await event.save();
+    let ticket;
+    try {
+      ticket = await TicketModel.create({
+        eventId: event._id.toString(),
+        eventName: event.name,
+        eventDate: event.date,
+        venue: event.venue,
+        userId: auth.userId,
+        boundDeviceId: auth.deviceId,
+        seedSecret,
+        status: 'ACTIVE'
+      });
+    } catch (error) {
+      await EventModel.updateOne({ _id: event._id, soldTickets: { $gt: 0 } }, { $inc: { soldTickets: -1 } });
+      throw error;
+    }
 
     const { seedSecret: _seedSecret, ...safeTicket } = ticket.toObject();
-    res.json(safeTicket);
+    res.status(201).json(safeTicket);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

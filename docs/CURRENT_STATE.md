@@ -41,7 +41,7 @@ SecureBuy is a React/Vite frontend with a small Express/Mongoose backend. The cu
 
 - `POST /api/tickets/purchase` checks event existence and inventory, creates a ticket with a random secret, binds it to the submitted device ID, and increments `soldTickets`.
 - Checkout loops through cart quantities and performs one purchase request per ticket.
-- Inventory updates are not atomic, so concurrent purchases can oversell an event.
+- Inventory reservation now increments `soldTickets` atomically only while capacity remains; ticket creation rolls the reservation back if persistence fails.
 - There is no payment provider or payment verification.
 
 ### Ticket display and scanning
@@ -86,7 +86,7 @@ SecureBuy is a React/Vite frontend with a small Express/Mongoose backend. The cu
 2. Add recovery attempt rate limits, audit logging, and a migration for any legacy plaintext recovery fields.
 3. Replace the prototype SHA-256 time-window token with standards-compliant TOTP or a signed, nonce-based ticket token.
 4. Add venue/event scoping to manager scan authorization and audit every scan.
-5. Make inventory reservation and purchase idempotent and atomic; add payment integration before issuing tickets.
+5. Add idempotency keys and payment integration before issuing tickets; atomic capacity reservation is now in place.
 6. Mark tickets used atomically during scan and reject already-used/revoked tickets.
 7. Add request validation, rate limiting, structured errors, security headers, restricted CORS, audit logs, and monitoring.
 8. Remove or consolidate the duplicate `dataService.ts` client and define one environment-driven API base URL.
