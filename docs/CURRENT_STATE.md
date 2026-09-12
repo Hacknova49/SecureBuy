@@ -13,7 +13,7 @@ SecureBuy is a React/Vite frontend with a small Express/Mongoose backend. The cu
 | --- | --- | --- |
 | Frontend | `frontend/` | React 19 UI, Vite build, attendee and manager flows |
 | Frontend API client | `frontend/src/services/api.ts` | Production API calls to `https://securebuy.onrender.com/api`, local device/session persistence |
-| Legacy API client | `frontend/src/services/dataService.ts` | Duplicate localhost API implementation; currently unused |
+| Frontend API client | `frontend/src/services/api.ts` | Single environment-driven API client with session headers |
 | Frontend domain types | `frontend/src/types.ts` | User, event, ticket, scan result, and view-mode types |
 | Backend | `backend/src/server.ts` | Express routes, MongoDB connection, Gemini client, ticket validation |
 | Backend models | `backend/src/models.ts` | Mongoose schemas for users, events, and tickets |
@@ -90,7 +90,7 @@ SecureBuy is a React/Vite frontend with a small Express/Mongoose backend. The cu
 5. Add idempotency keys and payment integration before issuing tickets; atomic capacity reservation is now in place.
 6. Mark tickets used atomically during scan and reject already-used/revoked tickets.
 7. Add distributed rate limiting, structured errors, restricted CORS, audit logs, and monitoring; baseline local headers and limits are now present.
-8. Remove or consolidate the duplicate `dataService.ts` client and define one environment-driven API base URL.
+8. Keep the single environment-driven API client as the frontend integration boundary.
 9. Replace the external QR image dependency with an in-app QR renderer or a controlled backend/static asset path.
 10. Add unit, integration, and end-to-end coverage for auth, purchase, token rotation, scanning, inventory, and recovery.
 
