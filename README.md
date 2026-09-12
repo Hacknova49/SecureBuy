@@ -32,14 +32,17 @@ This results in revenue loss for organizers, overcrowding at venues, and a poor 
     cd backend
     npm install
     ```
-2.  Create a `.env` file in `backend/`:
-    ```env
-    PORT=5000
-    MONGODB_URI=mongodb://localhost:27017/securebuy
-    GEMINI_API_KEY=your_google_gemini_key_here
-    JWT_SECRET=super_secret_key_change_this
-    CORS_ORIGIN=http://localhost:3000
+2.  Copy `backend/.env.example` to `backend/.env` and replace the placeholders:
+    ```powershell
+    Copy-Item backend/.env.example backend/.env
     ```
+    - `PORT`: backend HTTP port; keep `5000` locally.
+    - `MONGODB_URI`: current runtime database during migration, for example `mongodb://127.0.0.1:27017/securebuy`.
+    - `DATABASE_URL`: Supabase transaction pooler URL, used by Prisma runtime after cutover.
+    - `DIRECT_URL`: Supabase direct database URL, used by Prisma migrations.
+    - `GEMINI_API_KEY`: server-only Google Gemini key; never put this in frontend env.
+    - `JWT_SECRET`: long random signing secret; generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+    - `CORS_ORIGIN`: frontend origin, normally `http://localhost:3000`.
 3.  Start Server:
     ```bash
     cd backend
@@ -55,7 +58,12 @@ The frontend uses `VITE_API_URL` when set; otherwise it targets the deployed API
     cd frontend
     npm install
     ```
-2.  Start Client:
+2.  Copy `frontend/.env.example` to `frontend/.env`:
+    ```powershell
+    Copy-Item frontend/.env.example frontend/.env
+    ```
+    Set `VITE_API_URL=http://localhost:5000` for local development, or your deployed backend URL in production.
+3.  Start Client:
     ```bash
     npm run dev
     ```
@@ -66,7 +74,7 @@ The frontend uses `VITE_API_URL` when set; otherwise it targets the deployed API
 
 ### Supabase database migration
 
-The backend now includes a versioned PostgreSQL schema in `backend/prisma/`. Configure the Supabase **pooler** connection as `DATABASE_URL` and the direct database connection as `DIRECT_URL`; keep both server-only.
+The backend now includes a versioned PostgreSQL schema in `backend/prisma/`. In Supabase, open **Project Settings → Database → Connection strings**. Copy the **transaction pooler** connection into `DATABASE_URL` and the **direct** connection into `DIRECT_URL`; replace the password placeholder and URL-encode special password characters. Keep both server-only.
 
 ```env
 DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?pgbouncer=true
@@ -81,4 +89,4 @@ npm run db:status
 npm run db:migrate
 ```
 
-The application still uses MongoDB until the repository layer cutover is completed and verified.
+The application still uses MongoDB until the repository layer cutover is completed and verified. Running `npm run db:migrate` creates the Supabase tables but does not switch application traffic.
