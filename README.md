@@ -36,8 +36,9 @@ This results in revenue loss for organizers, overcrowding at venues, and a poor 
     ```env
     PORT=5000
     MONGODB_URI=mongodb://localhost:27017/securebuy
-    API_KEY=your_google_gemini_key_here
+    GEMINI_API_KEY=your_google_gemini_key_here
     JWT_SECRET=super_secret_key_change_this
+    CORS_ORIGIN=http://localhost:3000
     ```
 3.  Start Server:
     ```bash
@@ -45,6 +46,8 @@ This results in revenue loss for organizers, overcrowding at venues, and a poor 
     cd src
     npm run dev
     ```
+
+The frontend uses `VITE_API_URL` when set; otherwise it targets the deployed API.
 
 ### 3. Frontend Setup
 1.  Navigate to `frontend`:

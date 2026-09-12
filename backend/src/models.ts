@@ -7,7 +7,9 @@ const UserSchema = new mongoose.Schema(
     email: { type: String, unique: true, required: true },
     avatarUrl: String,
     boundDeviceId: { type: String, default: '' },
-    recoveryCode: String,
+    recoveryCode: { type: String, select: false },
+    recoveryCodeHash: { type: String, select: false },
+    recoveryCodeExpiresAt: { type: Date, select: false },
     role: {
       type: String,
       enum: ['USER', 'MANAGER'],
@@ -57,7 +59,8 @@ const TicketSchema = new mongoose.Schema(
 
     seedSecret: {
       type: String,
-      required: true
+      required: true,
+      select: false
     },
 
     purchaseDate: { type: Date, default: Date.now }

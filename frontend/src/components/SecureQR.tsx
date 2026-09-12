@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 import React, { useEffect, useState } from 'react';
 import { Ticket } from '../types';
+import { getTicketToken } from '../services/api';
 import {
   Smartphone,
   RefreshCw,
@@ -24,11 +25,23 @@ export const SecureQR: React.FC<SecureQRProps> = ({ ticket, deviceId }) => {
 
     if (ticket.boundDeviceId !== deviceId) return;
 
-    // Simple frontend timer (backend validates token)
-    const interval = setInterval(() => {
+    let cancelled = false;
+    const refreshToken = async () => {
+      try {
+        const result = await getTicketToken(ticket.id);
+        if (!cancelled) {
+          setToken(result.token);
+          setTimeLeft(result.expiresIn);
+        }
+      } catch {
+        if (!cancelled) setToken('------');
+      }
+    };
+    void refreshToken();
+    const countdownInterval = setInterval(() => {
       setTimeLeft(t => (t > 1 ? t - 1 : 15));
-      setToken(Math.floor(100000 + Math.random() * 900000).toString());
     }, 1000);
+    const refreshInterval = setInterval(() => void refreshToken(), 15000);
 
     const handleVisibilityChange = () => {
       if (document.hidden) setShowBlur(true);
@@ -38,7 +51,9 @@ export const SecureQR: React.FC<SecureQRProps> = ({ ticket, deviceId }) => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      clearInterval(interval);
+      clearInterval(countdownInterval);
+      clearInterval(refreshInterval);
+      cancelled = true;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [ticket, deviceId]);

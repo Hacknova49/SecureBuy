@@ -7,7 +7,7 @@ import {
   AuthResponse
 } from '../types';
 
-const API_URL = 'https://securebuy.onrender.com/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'https://securebuy.onrender.com'}/api`;
 
 
 type WithId<T> = T & { id: string };
@@ -17,6 +17,7 @@ type WithId<T> = T & { id: string };
 // --------------------
 const STORAGE_KEY_DEVICE = 'dynaTick_deviceId';
 const STORAGE_KEY_SESSION_USER = 'session_user';
+const STORAGE_KEY_SESSION_TOKEN = 'session_token';
 
 if (!localStorage.getItem(STORAGE_KEY_DEVICE)) {
   localStorage.setItem(
@@ -36,7 +37,12 @@ async function apiFetch<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const res = await fetch(`${API_URL}${endpoint}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(localStorage.getItem(STORAGE_KEY_SESSION_TOKEN)
+        ? { Authorization: `Bearer ${localStorage.getItem(STORAGE_KEY_SESSION_TOKEN)}` }
+        : {})
+    },
     ...options
   });
 
@@ -57,7 +63,7 @@ export const registerOrLogin = async (
   name: string,
   role: UserRole
 ): Promise<AuthResponse> => {
-  const data = await apiFetch<{ user: any; isNew: boolean }>('/auth/login', {
+  const data = await apiFetch<{ user: any; token: string; isNew: boolean; recoveryCode?: string }>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({
       email,
@@ -72,7 +78,9 @@ export const registerOrLogin = async (
     id: data.user._id
   };
 
+  if (data.recoveryCode) user.recoveryCode = data.recoveryCode;
   localStorage.setItem(STORAGE_KEY_SESSION_USER, JSON.stringify(user));
+  localStorage.setItem(STORAGE_KEY_SESSION_TOKEN, data.token);
 
   return { user, isNew: data.isNew };
 };
@@ -91,17 +99,22 @@ export const recoverAccount = async (
   });
 
   const user: User = {
-    ...data,
-    id: data._id
+    ...data.user,
+    id: data.user._id
   };
 
   localStorage.setItem(STORAGE_KEY_SESSION_USER, JSON.stringify(user));
+  localStorage.setItem(STORAGE_KEY_SESSION_TOKEN, data.token);
   return user;
 };
 
 export const logout = () => {
   localStorage.removeItem(STORAGE_KEY_SESSION_USER);
+  localStorage.removeItem(STORAGE_KEY_SESSION_TOKEN);
 };
+
+export const getTicketToken = async (ticketId: string): Promise<{ token: string; expiresIn: number }> =>
+  apiFetch(`/tickets/${ticketId}/token`);
 
 export const getCurrentUser = (): User | null => {
   try {
